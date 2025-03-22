@@ -46,6 +46,11 @@ app.post("/get-token", (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`LiveKit token server running at http://localhost:${port}`);
+app.get("/", (req, res) => {
+  res.send("LiveKit token server is running!");
+});
+
+app.listen(port, "0.0.0.0", () => {
+  console.log(`LiveKit token server running at http://0.0.0.0:${port}`);
+  console.log(`Make sure this server is accessible from your device's network`);
 });
