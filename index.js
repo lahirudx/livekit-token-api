@@ -1,11 +1,13 @@
 const express = require("express");
 const bodyParser = require("body-parser");
+const cors = require("cors"); // Import CORS middleware
 const { AccessToken } = require("livekit-server-sdk");
 require("dotenv").config();
 
 const app = express();
 const port = 3000;
 
+app.use(cors()); // Enable CORS
 app.use(bodyParser.json());
 
 app.post("/get-token", (req, res) => {
