@@ -3,17 +3,22 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "livekit-server-sdk": "^1.0.0"
+    "livekit-server-sdk": "^2.10.2",
+    "ws": "^8.18.1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "A small server to generate LiveKit tokens"
+  "description": "A small server to generate LiveKit tokens",
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
 }
