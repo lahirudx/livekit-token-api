@@ -19,11 +19,16 @@ export class AuthController {
 
   register = async (req: Request, res: Response): Promise<void> => {
     try {
+      console.log("Registration request body:", req.body);
       const payload: RegisterPayload = req.body;
       const result = await this.authService.register(payload);
       res.status(200).json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      res.status(400).json({
+        message: error.message || "Registration failed",
+        details: error.toString(),
+      });
     }
   };
 

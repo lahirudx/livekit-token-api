@@ -19,57 +19,66 @@ export class AuthService {
   }
 
   async register(payload: RegisterPayload): Promise<AuthResponse> {
-    const { email, password, inviteCode } = payload;
+    const { username, password, inviteCode } = payload;
+    console.log("Registration attempt:", { username, inviteCode });
 
     const invite = await prisma.inviteCode.findUnique({
       where: { code: inviteCode, isUsed: false },
     });
+    console.log("Found invite:", invite);
 
     if (!invite) {
       throw new Error("Invalid or used invite code");
     }
 
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { username },
     });
+    console.log("Existing user check:", existingUser);
 
     if (existingUser) {
-      throw new Error("User already exists");
+      throw new Error("Username already taken");
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        inviteCode: {
-          connect: { id: invite.id },
+    try {
+      const user = await prisma.user.create({
+        data: {
+          username,
+          password: hashedPassword,
+          inviteCode: {
+            connect: { id: invite.id },
+          },
         },
-      },
-    });
+      });
+      console.log("Created user:", user);
 
-    await prisma.inviteCode.update({
-      where: { id: invite.id },
-      data: { isUsed: true },
-    });
+      await prisma.inviteCode.update({
+        where: { id: invite.id },
+        data: { isUsed: true },
+      });
 
-    const token = this.generateToken(user.id);
+      const token = this.generateToken(user.id);
 
-    return {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-      },
-    };
+      return {
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+        },
+      };
+    } catch (error) {
+      console.error("Error creating user:", error);
+      throw error;
+    }
   }
 
   async login(payload: LoginPayload): Promise<AuthResponse> {
-    const { email, password } = payload;
+    const { username, password } = payload;
 
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { username },
     });
 
     if (!user) {
@@ -88,7 +97,7 @@ export class AuthService {
       token,
       user: {
         id: user.id,
-        email: user.email,
+        username: user.username,
       },
     };
   }

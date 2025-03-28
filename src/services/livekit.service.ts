@@ -79,4 +79,17 @@ export class LiveKitService {
       throw new Error("Failed to delete room");
     }
   }
+
+  async getRooms() {
+    try {
+      const rooms = await this.roomService.listRooms();
+      return rooms.map((room) => ({
+        id: room.name,
+        name: this.roomMappings.get(room.name) || room.name,
+        participants: room.numParticipants,
+      }));
+    } catch (error) {
+      throw new Error("Failed to fetch rooms");
+    }
+  }
 }

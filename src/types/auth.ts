@@ -1,11 +1,11 @@
 export interface RegisterPayload {
-  email: string;
+  username: string;
   password: string;
   inviteCode: string;
 }
 
 export interface LoginPayload {
-  email: string;
+  username: string;
   password: string;
 }
 
@@ -13,7 +13,7 @@ export interface AuthResponse {
   token: string;
   user: {
     id: string;
-    email: string;
+    username: string;
   };
 }
 
