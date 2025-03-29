@@ -73,7 +73,7 @@ export class LiveKitService {
     token.addGrant({
       roomJoin: true,
       room: roomId,
-      canPublish: isSource, // Only source can publish
+      canPublish: true, // Allow all participants to publish
       canSubscribe: true,
     });
 
