@@ -17,7 +17,7 @@ export class LiveKitController {
   }
 
   getToken = async (req: Request, res: Response): Promise<void> => {
-    const { room, username, isHost } = req.body;
+    const { room, username, isSource } = req.body;
 
     if (!username) {
       res.status(400).json({ error: "Username is required" });
@@ -29,14 +29,18 @@ export class LiveKitController {
         token,
         room: roomId,
         displayName,
-        isHost: isUserHost,
-      } = await this.livekitService.createTokenAndRoom(username, room, isHost);
+        isSource: isUserSource,
+      } = await this.livekitService.createTokenAndRoom(
+        username,
+        room,
+        isSource
+      );
 
       res.json({
         token,
         room: roomId,
         displayName,
-        isHost: isUserHost,
+        isSource: isUserSource,
       });
     } catch (error) {
       console.error("Error creating token:", error);

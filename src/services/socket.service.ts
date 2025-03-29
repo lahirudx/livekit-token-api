@@ -7,6 +7,7 @@ export class SocketService {
   private io: Server;
   private livekitService: LiveKitService;
   private roomParticipants: Map<string, Set<string>>;
+  private roomSources: Map<string, string>;
 
   private constructor(server: HttpServer) {
     this.io = new Server(server, {
@@ -17,7 +18,9 @@ export class SocketService {
     });
     this.livekitService = LiveKitService.getInstance();
     this.roomParticipants = new Map();
+    this.roomSources = new Map();
     this.setupSocketHandlers();
+    this.startCleanupInterval();
   }
 
   public static getInstance(server?: HttpServer): SocketService {
@@ -33,27 +36,64 @@ export class SocketService {
 
       socket.on(
         "join-room",
-        async (data: { roomId: string; username: string }) => {
-          const { roomId, username } = data;
-          console.log(`User ${username} joining room ${roomId}`);
+        async (data: {
+          roomId: string;
+          username: string;
+          isSource: boolean;
+        }) => {
+          const { roomId, username, isSource } = data;
+          console.log(
+            `[SocketService] User ${username} joining room ${roomId} as ${
+              isSource ? "source" : "participant"
+            }`
+          );
 
           // Join socket room
           socket.join(roomId);
+          console.log(
+            `[SocketService] Socket ${socket.id} joined room ${roomId}`
+          );
 
           // Update room participants
           if (!this.roomParticipants.has(roomId)) {
+            console.log(
+              `[SocketService] Creating new participant set for room ${roomId}`
+            );
             this.roomParticipants.set(roomId, new Set());
           }
           this.roomParticipants.get(roomId)?.add(username);
+          console.log(
+            `[SocketService] Current participants in room ${roomId}:`,
+            Array.from(this.roomParticipants.get(roomId) || [])
+          );
+
+          // If user is source, store the source information
+          if (isSource) {
+            console.log(
+              `[SocketService] Setting ${username} as source for room ${roomId}`
+            );
+            this.roomSources.set(roomId, username);
+            console.log(
+              `[SocketService] Current room sources:`,
+              Object.fromEntries(this.roomSources.entries())
+            );
+          }
 
           // Notify others in the room
           socket.to(roomId).emit("participant-joined", { username });
+          console.log(
+            `[SocketService] Notified room ${roomId} about new participant ${username}`
+          );
 
           // Send current participants to the new user
           const participants = Array.from(
             this.roomParticipants.get(roomId) || []
           );
           socket.emit("room-participants", { participants });
+          console.log(
+            `[SocketService] Sent participant list to ${username}:`,
+            participants
+          );
         }
       );
 
@@ -61,30 +101,97 @@ export class SocketService {
         "leave-room",
         async (data: { roomId: string; username: string }) => {
           const { roomId, username } = data;
-          console.log(`User ${username} leaving room ${roomId}`);
+          console.log(
+            `[SocketService] User ${username} leaving room ${roomId}`
+          );
 
           // Leave socket room
           socket.leave(roomId);
+          console.log(
+            `[SocketService] Socket ${socket.id} left room ${roomId}`
+          );
 
-          // Update room participants
-          const participants = this.roomParticipants.get(roomId);
-          if (participants) {
-            participants.delete(username);
-            if (participants.size === 0) {
-              this.roomParticipants.delete(roomId);
+          // Check if the leaving user is the source
+          const source = this.roomSources.get(roomId);
+          const isSource = source === username;
+          console.log(
+            `[SocketService] Is leaving user source? ${isSource} (room source: ${source})`
+          );
+
+          if (isSource) {
+            console.log(
+              `[SocketService] Source left, force closing room ${roomId}...`
+            );
+
+            // Force disconnect all participants first
+            const participants = this.roomParticipants.get(roomId);
+            if (participants) {
+              console.log(
+                `[SocketService] Notifying ${participants.size} participants about source leaving`
+              );
+              // Notify all participants immediately to force disconnect
+              this.io.to(roomId).emit("source-left", {
+                message: "Source has left the room",
+                forceDisconnect: true,
+              });
+
+              // Give a small delay for clients to process the disconnect message
+              await new Promise((resolve) => setTimeout(resolve, 100));
             }
-          }
 
-          // Notify others in the room
-          socket.to(roomId).emit("participant-left", { username });
+            // Terminate the room and cleanup
+            console.log(`[SocketService] Terminating room ${roomId}`);
+            await this.livekitService.terminateRoom(roomId).catch((error) => {
+              console.error(
+                `[SocketService] Error terminating room ${roomId}:`,
+                error
+              );
+            });
 
-          // If no participants left, terminate the room
-          if (this.roomParticipants.get(roomId)?.size === 0) {
-            try {
-              await this.livekitService.terminateRoom(roomId);
-              console.log(`Room ${roomId} terminated`);
-            } catch (error) {
-              console.error(`Failed to terminate room ${roomId}:`, error);
+            // Always cleanup local state
+            this.roomParticipants.delete(roomId);
+            this.roomSources.delete(roomId);
+            console.log(`[SocketService] Room ${roomId} cleanup complete`);
+          } else {
+            // Update room participants
+            const participants = this.roomParticipants.get(roomId);
+            if (participants) {
+              participants.delete(username);
+              console.log(
+                `[SocketService] Removed ${username} from room ${roomId}`
+              );
+              console.log(
+                `[SocketService] Remaining participants:`,
+                Array.from(participants)
+              );
+
+              // If room is empty after participant left, cleanup
+              if (participants.size === 0) {
+                console.log(
+                  `[SocketService] Room ${roomId} is empty, cleaning up`
+                );
+                await this.livekitService
+                  .terminateRoom(roomId)
+                  .catch((error) => {
+                    console.error(
+                      `[SocketService] Error terminating empty room ${roomId}:`,
+                      error
+                    );
+                  });
+
+                // Always cleanup local state
+                this.roomParticipants.delete(roomId);
+                this.roomSources.delete(roomId);
+                console.log(
+                  `[SocketService] Empty room ${roomId} cleanup complete`
+                );
+              } else {
+                // Just notify others about participant leaving
+                socket.to(roomId).emit("participant-left", { username });
+                console.log(
+                  `[SocketService] Notified room about participant ${username} leaving`
+                );
+              }
             }
           }
         }
@@ -94,6 +201,17 @@ export class SocketService {
         console.log("Client disconnected:", socket.id);
       });
     });
+  }
+
+  private startCleanupInterval() {
+    // Run cleanup every 5 minutes
+    setInterval(async () => {
+      try {
+        await this.livekitService.cleanupStaleRooms();
+      } catch (error) {
+        console.error("Failed to run room cleanup:", error);
+      }
+    }, 5 * 60 * 1000);
   }
 
   public getIO(): Server {
