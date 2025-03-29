@@ -69,6 +69,27 @@ export class SocketService {
 
           // If user is source, store the source information
           if (isSource) {
+            // Check if this user is already a source in another room
+            const existingRoomId = this.findExistingRoomForUser(username);
+            if (existingRoomId && existingRoomId !== roomId) {
+              console.log(
+                `[SocketService] User ${username} was already source for room ${existingRoomId}, now joining room ${roomId}`
+              );
+
+              // Notify participants in the old room
+              this.io.to(existingRoomId).emit("source-left", {
+                message: "Source has left the room",
+                forceDisconnect: true,
+              });
+
+              // Give a small delay for clients to process
+              await new Promise((resolve) => setTimeout(resolve, 100));
+
+              // Clean up old room state
+              this.roomParticipants.delete(existingRoomId);
+              this.roomSources.delete(existingRoomId);
+            }
+
             console.log(
               `[SocketService] Setting ${username} as source for room ${roomId}`
             );
@@ -204,17 +225,26 @@ export class SocketService {
   }
 
   private startCleanupInterval() {
-    // Run cleanup every 5 minutes
+    // Run cleanup every 1 minute
     setInterval(async () => {
       try {
         await this.livekitService.cleanupStaleRooms();
       } catch (error) {
         console.error("Failed to run room cleanup:", error);
       }
-    }, 5 * 60 * 1000);
+    }, 1 * 60 * 1000);
   }
 
   public getIO(): Server {
     return this.io;
+  }
+
+  private findExistingRoomForUser(username: string): string | undefined {
+    for (const [roomId, sourceUser] of this.roomSources.entries()) {
+      if (sourceUser === username) {
+        return roomId;
+      }
+    }
+    return undefined;
   }
 }

@@ -39,6 +39,20 @@ export class LiveKitService {
     let roomId = room;
 
     if (isSource) {
+      // Check if this user already has a room and terminate it
+      const existingRoomId = this.findExistingRoomForUser(username);
+      if (existingRoomId) {
+        console.log(
+          `[LiveKitService] User ${username} already has room ${existingRoomId}, terminating it before creating a new one`
+        );
+        await this.terminateRoom(existingRoomId).catch((error) => {
+          console.error(
+            `[LiveKitService] Error terminating existing room ${existingRoomId}:`,
+            error
+          );
+        });
+      }
+
       roomId = this.generateRoomId();
       const displayName = `${username}'s stream`;
       console.log(
@@ -132,8 +146,12 @@ export class LiveKitService {
     try {
       const rooms = await this.roomService.listRooms();
 
+      // First, check for duplicate source rooms
+      await this.cleanupDuplicateSourceRooms();
+
+      // Then clean up empty rooms
       for (const room of rooms) {
-        // If room has no participants or hasn't been updated in 5 minutes
+        // If room has no participants
         if (room.numParticipants === 0) {
           await this.terminateRoom(room.name);
         }
@@ -141,6 +159,53 @@ export class LiveKitService {
     } catch (error) {
       console.error("Failed to cleanup stale rooms:", error);
     }
+  }
+
+  async cleanupDuplicateSourceRooms() {
+    // Create a map to track the latest room for each source user
+    const latestRoomByUser = new Map<
+      string,
+      { roomId: string; timestamp: Date }
+    >();
+
+    // Get all rooms from LiveKit
+    const rooms = await this.roomService.listRooms();
+
+    // Track the latest room for each source user
+    for (const [roomId, sourceUser] of this.roomSources.entries()) {
+      const room = rooms.find((r) => r.name === roomId);
+      if (!room) continue; // Room doesn't exist on LiveKit server
+
+      const roomTimestamp = room.creationTime
+        ? new Date(room.creationTime)
+        : new Date();
+
+      if (
+        !latestRoomByUser.has(sourceUser) ||
+        roomTimestamp > latestRoomByUser.get(sourceUser)!.timestamp
+      ) {
+        latestRoomByUser.set(sourceUser, { roomId, timestamp: roomTimestamp });
+      }
+    }
+
+    // Clean up older rooms for each user
+    for (const [roomId, sourceUser] of this.roomSources.entries()) {
+      const latestRoom = latestRoomByUser.get(sourceUser);
+
+      if (latestRoom && latestRoom.roomId !== roomId) {
+        console.log(
+          `[LiveKitService] Found duplicate room ${roomId} for user ${sourceUser}, terminating it`
+        );
+        await this.terminateRoom(roomId).catch((error) => {
+          console.error(
+            `[LiveKitService] Error terminating duplicate room ${roomId}:`,
+            error
+          );
+        });
+      }
+    }
+
+    console.log("[LiveKitService] Duplicate room cleanup completed");
   }
 
   async getRooms() {
@@ -154,5 +219,14 @@ export class LiveKitService {
     } catch (error) {
       throw new Error("Failed to fetch rooms");
     }
+  }
+
+  private findExistingRoomForUser(username: string): string | undefined {
+    for (const [roomId, sourceUser] of this.roomSources.entries()) {
+      if (sourceUser === username) {
+        return roomId;
+      }
+    }
+    return undefined;
   }
 }

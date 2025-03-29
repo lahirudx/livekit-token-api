@@ -74,4 +74,17 @@ export class LiveKitController {
       res.status(500).json({ error: error.message || "Internal server error" });
     }
   };
+
+  cleanupDuplicateRooms = async (
+    req: Request,
+    res: Response
+  ): Promise<void> => {
+    try {
+      await this.livekitService.cleanupDuplicateSourceRooms();
+      res.json({ message: "Duplicate rooms cleaned up successfully" });
+    } catch (error) {
+      console.error("Error cleaning up duplicate rooms:", error);
+      res.status(500).json({ error: error.message || "Internal server error" });
+    }
+  };
 }
