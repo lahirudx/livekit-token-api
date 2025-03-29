@@ -17,7 +17,7 @@ export class LiveKitController {
   }
 
   getToken = async (req: Request, res: Response): Promise<void> => {
-    const { username, room, isHost } = req.body;
+    const { room, username, isHost } = req.body;
 
     if (!username) {
       res.status(400).json({ error: "Username is required" });
@@ -25,30 +25,39 @@ export class LiveKitController {
     }
 
     try {
-      const result = await this.livekitService.createTokenAndRoom(
-        username,
-        room,
-        isHost
-      );
-      res.json(result);
+      const {
+        token,
+        room: roomId,
+        displayName,
+        isHost: isUserHost,
+      } = await this.livekitService.createTokenAndRoom(username, room, isHost);
+
+      res.json({
+        token,
+        room: roomId,
+        displayName,
+        isHost: isUserHost,
+      });
     } catch (error) {
-      console.error("Error generating token:", error);
+      console.error("Error creating token:", error);
       res.status(500).json({ error: error.message || "Internal server error" });
     }
   };
 
   deleteRoom = async (req: Request, res: Response): Promise<void> => {
     const { roomName } = req.params;
-    const { username } = req.query;
+
+    if (!roomName) {
+      res.status(400).json({ error: "Room name is required" });
+      return;
+    }
 
     try {
-      const result = await this.livekitService.terminateRoom(roomName);
-      res.json({ message: "Room terminated successfully", ...result });
+      await this.livekitService.terminateRoom(roomName);
+      res.json({ message: "Room deleted successfully" });
     } catch (error) {
-      console.error("Error terminating room:", error);
-      res
-        .status(500)
-        .json({ message: "Failed to terminate room", error: error.message });
+      console.error("Error deleting room:", error);
+      res.status(500).json({ error: error.message || "Internal server error" });
     }
   };
 
@@ -58,38 +67,6 @@ export class LiveKitController {
       res.json(rooms);
     } catch (error) {
       console.error("Error fetching rooms:", error);
-      res.status(500).json({ error: error.message || "Internal server error" });
-    }
-  };
-
-  participantLeft = async (req: Request, res: Response): Promise<void> => {
-    const { room, username } = req.body;
-
-    if (!room || !username) {
-      res.status(400).json({ error: "Room and username are required" });
-      return;
-    }
-
-    try {
-      // Check if room has other participants
-      const rooms = await this.livekitService.getRooms();
-      const targetRoom = rooms.find((r) => r.id === room);
-
-      // If room has 0 or 1 participants (including the one leaving), delete it
-      if (targetRoom && targetRoom.participants <= 1) {
-        console.log(
-          `Last participant ${username} left room ${room}, terminating room`
-        );
-        await this.livekitService.terminateRoom(room);
-        res.json({ message: "Room terminated successfully" });
-      } else {
-        console.log(
-          `Participant ${username} left room ${room}, but others remain`
-        );
-        res.json({ message: "Participant left, room still active" });
-      }
-    } catch (error) {
-      console.error("Error handling participant left:", error);
       res.status(500).json({ error: error.message || "Internal server error" });
     }
   };
