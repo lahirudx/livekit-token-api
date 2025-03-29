@@ -43,8 +43,8 @@ export class LiveKitService {
 
       await this.roomService.createRoom({
         name: roomId,
-        emptyTimeout: 10 * 60,
-        maxParticipants: 20,
+        emptyTimeout: 20,
+        maxParticipants: 10,
       });
     } else if (!roomId) {
       throw new Error("Room ID is required for non-host users");
