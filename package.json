@@ -9,7 +9,8 @@
     "build": "tsc",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "generate-invite": "ts-node src/scripts/generateInviteCode.ts"
+    "generate-invite": "ts-node src/scripts/generateInviteCode.ts",
+    "delete-unused": "ts-node src/scripts/deleteExpiredCodes.ts"
   },
   "keywords": [],
   "author": "",

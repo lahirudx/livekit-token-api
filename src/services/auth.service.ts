@@ -31,6 +31,10 @@ export class AuthService {
       throw new Error("Invalid or used invite code");
     }
 
+    if (invite.expiresAt < new Date()) {
+      throw new Error("Invite code has expired");
+    }
+
     const existingUser = await prisma.user.findUnique({
       where: { username },
     });
@@ -47,7 +51,7 @@ export class AuthService {
         data: {
           username,
           password: hashedPassword,
-          inviteCode: {
+          inviteCodes: {
             connect: { id: invite.id },
           },
         },
