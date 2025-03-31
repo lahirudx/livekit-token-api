@@ -8,6 +8,7 @@ export class SocketService {
   private livekitService: LiveKitService;
   private roomParticipants: Map<string, Set<string>>;
   private roomSources: Map<string, string>;
+  private sourceLocations: Map<string, { latitude: number; longitude: number }>;
 
   private constructor(server: HttpServer) {
     this.io = new Server(server, {
@@ -19,6 +20,7 @@ export class SocketService {
     this.livekitService = LiveKitService.getInstance();
     this.roomParticipants = new Map();
     this.roomSources = new Map();
+    this.sourceLocations = new Map();
     this.setupSocketHandlers();
     this.startCleanupInterval();
   }
@@ -88,6 +90,7 @@ export class SocketService {
               // Clean up old room state
               this.roomParticipants.delete(existingRoomId);
               this.roomSources.delete(existingRoomId);
+              this.sourceLocations.delete(username);
             }
 
             console.log(
@@ -115,6 +118,42 @@ export class SocketService {
             `[SocketService] Sent participant list to ${username}:`,
             participants
           );
+
+          // Send current source locations to the new participant
+          const currentSources = Array.from(this.sourceLocations.entries())
+            .filter(([sourceUsername]) => sourceUsername !== username)
+            .map(([sourceUsername, location]) => ({
+              username: sourceUsername,
+              location,
+            }));
+
+          if (currentSources.length > 0) {
+            socket.emit("source-location-update", currentSources);
+          }
+        }
+      );
+
+      socket.on(
+        "update-location",
+        (data: {
+          roomId: string;
+          username: string;
+          location: { latitude: number; longitude: number };
+        }) => {
+          const { username, location } = data;
+          console.log(
+            `[SocketService] Received location update for ${username}:`,
+            location
+          );
+
+          // Store the location
+          this.sourceLocations.set(username, location);
+
+          // Broadcast to all clients
+          this.io.emit("source-location-update", {
+            username,
+            location,
+          });
         }
       );
 
@@ -154,6 +193,7 @@ export class SocketService {
               this.io.to(roomId).emit("source-left", {
                 message: "Source has left the room",
                 forceDisconnect: true,
+                username: username,
               });
 
               // Give a small delay for clients to process the disconnect message
@@ -172,6 +212,7 @@ export class SocketService {
             // Always cleanup local state
             this.roomParticipants.delete(roomId);
             this.roomSources.delete(roomId);
+            this.sourceLocations.delete(username);
             console.log(`[SocketService] Room ${roomId} cleanup complete`);
           } else {
             // Update room participants
