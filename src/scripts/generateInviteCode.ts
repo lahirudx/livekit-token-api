@@ -68,7 +68,9 @@ async function generateInviteCodes(count: number = 1, daysValid: number = 7) {
     );
     codes.forEach((inviteCode) => {
       console.log(`Code: ${inviteCode.code}`);
-      console.log(`Expires: ${inviteCode.expiresAt.toLocaleString()}`);
+      console.log(
+        `Expires: ${inviteCode.expiresAt?.toLocaleString() || "No expiration"}`
+      );
       console.log("---");
     });
   } catch (error) {

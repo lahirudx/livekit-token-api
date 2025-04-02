@@ -22,7 +22,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/livekit", livekitRoutes);
 
 // Health check
-app.get("/health", (req, res) => {
+app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 

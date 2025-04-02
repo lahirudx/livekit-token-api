@@ -65,7 +65,7 @@ export class LiveKitController {
     }
   };
 
-  getRooms = async (req: Request, res: Response): Promise<void> => {
+  getRooms = async (_req: Request, res: Response): Promise<void> => {
     try {
       const rooms = await this.livekitService.getRooms();
       res.json(rooms);
@@ -76,7 +76,7 @@ export class LiveKitController {
   };
 
   cleanupDuplicateRooms = async (
-    req: Request,
+    _req: Request,
     res: Response
   ): Promise<void> => {
     try {
