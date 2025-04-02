@@ -36,6 +36,46 @@ export class SocketService {
     this.io.on("connection", (socket: Socket) => {
       console.log("Client connected:", socket.id);
 
+      // --- Send initial source locations immediately on connection ---
+      try {
+        // Create a reverse map for efficient lookup: username -> roomId
+        const sourceUserToRoomId = new Map<string, string>();
+        for (const [roomId, sourceUser] of this.roomSources.entries()) {
+          sourceUserToRoomId.set(sourceUser, roomId);
+        }
+
+        const currentSources = Array.from(this.sourceLocations.entries())
+          // We don't know the username yet, so we send all sources
+          .map(([sourceUsername, location]) => {
+            const roomId = sourceUserToRoomId.get(sourceUsername);
+            return {
+              username: sourceUsername,
+              location,
+              roomId: roomId,
+            };
+          })
+          .filter((source) => source.roomId !== undefined); // Ensure we found a room
+
+        if (currentSources.length > 0) {
+          console.log(
+            `[SocketService] Sending initial source locations to NEWLY CONNECTED socket ${socket.id}:`,
+            currentSources
+          );
+          // Emit directly to the newly connected socket
+          socket.emit("source-location-update", currentSources);
+        } else {
+          console.log(
+            `[SocketService] No active sources to send to newly connected socket ${socket.id}`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[SocketService] Error sending initial sources to ${socket.id}:`,
+          error
+        );
+      }
+      // --------------------------------------------------------------
+
       socket.on(
         "join-room",
         async (data: {
@@ -71,6 +111,9 @@ export class SocketService {
 
           // If user is source, store the source information
           if (isSource) {
+            console.log(
+              `[SocketService] Processing join-room for SOURCE user: ${username}`
+            ); // Log source processing start
             // Check if this user is already a source in another room
             const existingRoomId = this.findExistingRoomForUser(username);
             if (existingRoomId && existingRoomId !== roomId) {
@@ -97,10 +140,18 @@ export class SocketService {
               `[SocketService] Setting ${username} as source for room ${roomId}`
             );
             this.roomSources.set(roomId, username);
+
+            // Don't initialize with fake coordinates, just log the current state
             console.log(
-              `[SocketService] Current room sources:`,
+              `[SocketService] Updated roomSources map:`,
               Object.fromEntries(this.roomSources.entries())
             );
+            console.log(
+              `[SocketService] Current sourceLocations map:`,
+              Object.fromEntries(this.sourceLocations.entries())
+            );
+
+            // Don't broadcast anything until we have real location data
           }
 
           // Notify others in the room
@@ -118,18 +169,6 @@ export class SocketService {
             `[SocketService] Sent participant list to ${username}:`,
             participants
           );
-
-          // Send current source locations to the new participant
-          const currentSources = Array.from(this.sourceLocations.entries())
-            .filter(([sourceUsername]) => sourceUsername !== username)
-            .map(([sourceUsername, location]) => ({
-              username: sourceUsername,
-              location,
-            }));
-
-          if (currentSources.length > 0) {
-            socket.emit("source-location-update", currentSources);
-          }
         }
       );
 
@@ -140,20 +179,30 @@ export class SocketService {
           username: string;
           location: { latitude: number; longitude: number };
         }) => {
-          const { username, location } = data;
+          const { roomId, username, location } = data;
           console.log(
-            `[SocketService] Received location update for ${username}:`,
+            `[SocketService] Received update-location for ${username} in room ${roomId}:`,
             location
           );
 
           // Store the location
           this.sourceLocations.set(username, location);
+          console.log(
+            `[SocketService] Stored location for ${username}. Current sources:`,
+            Array.from(this.sourceLocations.keys())
+          ); // Log current sources
 
-          // Broadcast to all clients
-          this.io.emit("source-location-update", {
+          // Broadcast to all clients, now including the roomId
+          const updateData = {
             username,
             location,
-          });
+            roomId,
+          };
+          console.log(
+            `[SocketService] Broadcasting source-location-update:`,
+            updateData
+          ); // Log broadcast data
+          this.io.emit("source-location-update", updateData);
         }
       );
 
@@ -214,6 +263,12 @@ export class SocketService {
             this.roomSources.delete(roomId);
             this.sourceLocations.delete(username);
             console.log(`[SocketService] Room ${roomId} cleanup complete`);
+
+            // Also notify all map viewers globally that this source is gone
+            this.io.emit("source-left", { username: username });
+            console.log(
+              `[SocketService] Broadcasted global source-left for ${username}`
+            );
           } else {
             // Update room participants
             const participants = this.roomParticipants.get(roomId);
@@ -261,8 +316,50 @@ export class SocketService {
 
       socket.on("disconnect", () => {
         console.log("Client disconnected:", socket.id);
+        // Note: We might need more robust disconnect handling here later
+        // to clean up if a source disconnects unexpectedly.
       });
     });
+
+    // Setup periodic broadcast of current sources
+    setInterval(() => {
+      try {
+        // Skip if no active sources with location data
+        if (this.sourceLocations.size === 0) {
+          return;
+        }
+
+        // Create a reverse map for efficient lookup: username -> roomId
+        const sourceUserToRoomId = new Map<string, string>();
+        for (const [roomId, sourceUser] of this.roomSources.entries()) {
+          sourceUserToRoomId.set(sourceUser, roomId);
+        }
+
+        // Get current sources with roomIds - ONLY include sources that have both:
+        // 1. A valid location in sourceLocations
+        // 2. A valid room mapping in roomSources
+        const currentSources = Array.from(this.sourceLocations.entries())
+          .map(([sourceUsername, location]) => {
+            const roomId = sourceUserToRoomId.get(sourceUsername);
+            return {
+              username: sourceUsername,
+              location,
+              roomId: roomId,
+            };
+          })
+          .filter((source) => source.roomId !== undefined);
+
+        if (currentSources.length > 0) {
+          console.log(
+            `[SocketService] PERIODIC BROADCAST: Re-sending ${currentSources.length} source locations with real data`
+          );
+          // Broadcast to all connected clients
+          this.io.emit("source-location-update", currentSources);
+        }
+      } catch (error) {
+        console.error(`[SocketService] Error in periodic broadcast:`, error);
+      }
+    }, 10000); // Every 10 seconds
   }
 
   private startCleanupInterval() {
