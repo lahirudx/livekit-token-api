@@ -25,10 +25,12 @@ export const registerPushToken = async (req: Request, res: Response) => {
       data: { userId, token },
     });
 
-    res.status(200).json({ message: "Push token registered successfully" });
+    return res
+      .status(200)
+      .json({ message: "Push token registered successfully" });
   } catch (error) {
     console.error("Error registering push token:", error);
-    res.status(500).json({ error: "Failed to register push token" });
+    return res.status(500).json({ error: "Failed to register push token" });
   }
 };
 
@@ -47,10 +49,10 @@ export const getNotifications = async (req: Request, res: Response) => {
       orderBy: { createdAt: "desc" },
     });
 
-    res.status(200).json(notifications);
+    return res.status(200).json(notifications);
   } catch (error) {
     console.error("Error fetching notifications:", error);
-    res.status(500).json({ error: "Failed to fetch notifications" });
+    return res.status(500).json({ error: "Failed to fetch notifications" });
   }
 };
 
@@ -121,13 +123,13 @@ export const sendLiveNotification = async (req: Request, res: Response) => {
       }
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Live notifications sent successfully",
       notificationCount: notifications.length,
     });
   } catch (error) {
     console.error("Error sending live notification:", error);
-    res.status(500).json({ error: "Failed to send live notifications" });
+    return res.status(500).json({ error: "Failed to send live notifications" });
   }
 };
 
@@ -141,9 +143,11 @@ export const markNotificationAsRead = async (req: Request, res: Response) => {
       data: { read: true },
     });
 
-    res.status(200).json(notification);
+    return res.status(200).json(notification);
   } catch (error) {
     console.error("Error marking notification as read:", error);
-    res.status(500).json({ error: "Failed to mark notification as read" });
+    return res
+      .status(500)
+      .json({ error: "Failed to mark notification as read" });
   }
 };
