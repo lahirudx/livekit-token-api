@@ -18,9 +18,29 @@ model InviteCode {
 }
 
 model User {
-  id          String       @id @default(auto()) @map("_id") @db.ObjectId
-  username    String       @unique
-  password    String
-  createdAt   DateTime     @default(now())
-  inviteCodes InviteCode[] @relation("UserInviteCode")
+  id            String         @id @default(auto()) @map("_id") @db.ObjectId
+  username      String         @unique
+  password      String
+  createdAt     DateTime       @default(now())
+  inviteCodes   InviteCode[]   @relation("UserInviteCode")
+  notifications Notification[]
+  pushToken     PushToken?
+}
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @db.ObjectId
+}
+
+model PushToken {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  token     String   @unique
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @unique @db.ObjectId
 }

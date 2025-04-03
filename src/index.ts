@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { createServer } from "http";
 import authRoutes from "./routes/auth.routes";
 import livekitRoutes from "./routes/livekit.routes";
+import notificationRoutes from "./routes/notifications.routes";
 import { SocketService } from "./services/socket.service";
 
 dotenv.config();
@@ -20,6 +21,7 @@ app.use(express.json());
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/livekit", livekitRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
