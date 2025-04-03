@@ -126,3 +126,20 @@ export const sendLiveNotification = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to send live notifications" });
   }
 };
+
+export const markNotificationAsRead = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log("Marking notification as read:", id);
+
+    const notification = await prisma.notification.update({
+      where: { id },
+      data: { read: true },
+    });
+
+    res.status(200).json(notification);
+  } catch (error) {
+    console.error("Error marking notification as read:", error);
+    res.status(500).json({ error: "Failed to mark notification as read" });
+  }
+};
