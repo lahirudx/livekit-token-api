@@ -20,9 +20,11 @@ export const registerPushToken = async (req: Request, res: Response) => {
       where: { token },
     });
 
-    // Then create a new token
-    await prisma.pushToken.create({
-      data: { userId, token },
+    // Then upsert the token
+    await prisma.pushToken.upsert({
+      where: { userId },
+      update: { token },
+      create: { userId, token },
     });
 
     return res
