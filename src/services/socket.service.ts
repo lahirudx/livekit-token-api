@@ -319,6 +319,90 @@ export class SocketService {
         // Note: We might need more robust disconnect handling here later
         // to clean up if a source disconnects unexpectedly.
       });
+
+      // Debug endpoints
+      socket.on("debug-get-rooms", () => {
+        try {
+          console.log("[SocketService] Debug: Received request for room info");
+
+          // Convert the room info into a serializable format
+          const rooms = Array.from(this.roomParticipants.entries()).map(
+            ([roomId, participants]) => {
+              return {
+                roomId,
+                isActive: true,
+                participants: Array.from(participants),
+                sourceUser: this.roomSources.get(roomId),
+                createdAt: new Date().toISOString(), // Mock creation time as we don't store this
+              };
+            }
+          );
+
+          console.log(
+            `[SocketService] Debug: Sending info for ${rooms.length} rooms`
+          );
+          socket.emit("debug-room-info", { rooms });
+        } catch (error) {
+          console.error(
+            "[SocketService] Debug: Error getting room info:",
+            error
+          );
+          socket.emit("debug-room-info", { rooms: [] });
+        }
+      });
+
+      socket.on("debug-cleanup-room", async (data: { roomId: string }) => {
+        try {
+          const { roomId } = data;
+          console.log(
+            `[SocketService] Debug: Force cleaning up room ${roomId}`
+          );
+
+          // Notify all participants to disconnect
+          this.io.to(roomId).emit("source-left", {
+            message: "Room force closed by admin",
+            forceDisconnect: true,
+          });
+
+          // Wait a moment for clients to process
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // Terminate the room
+          await this.livekitService.terminateRoom(roomId).catch((error) => {
+            console.error(
+              `[SocketService] Debug: Error terminating room ${roomId}:`,
+              error
+            );
+          });
+
+          // Clean up local state
+          const sourceUser = this.roomSources.get(roomId);
+          if (sourceUser) {
+            this.sourceLocations.delete(sourceUser);
+          }
+          this.roomParticipants.delete(roomId);
+          this.roomSources.delete(roomId);
+
+          console.log(`[SocketService] Debug: Room ${roomId} cleanup complete`);
+
+          // Send updated room list
+          const rooms = Array.from(this.roomParticipants.entries()).map(
+            ([rid, participants]) => {
+              return {
+                roomId: rid,
+                isActive: true,
+                participants: Array.from(participants),
+                sourceUser: this.roomSources.get(rid),
+                createdAt: new Date().toISOString(),
+              };
+            }
+          );
+
+          socket.emit("debug-room-info", { rooms });
+        } catch (error) {
+          console.error(`[SocketService] Debug: Error in cleanup-room:`, error);
+        }
+      });
     });
 
     // Setup periodic broadcast of current sources
@@ -366,11 +450,81 @@ export class SocketService {
     // Run cleanup every 1 minute
     setInterval(async () => {
       try {
+        console.log("[SocketService] Running scheduled room cleanup");
+        // First check for any stale rooms that might have disconnected clients
+        await this.checkForStaleRooms();
+        // Then run the regular cleanup from livekit service
         await this.livekitService.cleanupStaleRooms();
       } catch (error) {
-        console.error("Failed to run room cleanup:", error);
+        console.error("[SocketService] Failed to run room cleanup:", error);
       }
     }, 1 * 60 * 1000);
+  }
+
+  // Check for any stale rooms where clients may have disconnected without proper cleanup
+  private async checkForStaleRooms() {
+    try {
+      console.log("[SocketService] Checking for stale rooms...");
+      // Get rooms from the LiveKitService
+      const livekitRooms = await this.livekitService.getRooms();
+      const activeLivekitRoomIds = new Set(livekitRooms.map((room) => room.id));
+
+      // Check our tracked rooms against LiveKit's active rooms
+      for (const [roomId, participants] of this.roomParticipants.entries()) {
+        // If we have a room that's not in LiveKit, it's stale
+        if (!activeLivekitRoomIds.has(roomId)) {
+          console.log(
+            `[SocketService] Found stale room ${roomId} not in LiveKit, cleaning up`
+          );
+          this.roomParticipants.delete(roomId);
+
+          // If there was a source for this room, clean that up too
+          const sourceUser = this.roomSources.get(roomId);
+          if (sourceUser) {
+            this.sourceLocations.delete(sourceUser);
+            console.log(
+              `[SocketService] Cleaned up source ${sourceUser} for stale room ${roomId}`
+            );
+          }
+          this.roomSources.delete(roomId);
+        }
+        // If it's empty, clean it up
+        else if (participants.size === 0) {
+          console.log(
+            `[SocketService] Found empty room ${roomId}, cleaning up`
+          );
+          await this.livekitService.terminateRoom(roomId).catch((error) => {
+            console.error(
+              `[SocketService] Error terminating empty room ${roomId}:`,
+              error
+            );
+          });
+          this.roomParticipants.delete(roomId);
+          this.roomSources.delete(roomId);
+        }
+      }
+
+      // Check for any sources without rooms
+      for (const sourceUser of this.sourceLocations.keys()) {
+        let hasRoom = false;
+        for (const [_, user] of this.roomSources.entries()) {
+          if (user === sourceUser) {
+            hasRoom = true;
+            break;
+          }
+        }
+        if (!hasRoom) {
+          console.log(
+            `[SocketService] Found orphaned source ${sourceUser}, cleaning up`
+          );
+          this.sourceLocations.delete(sourceUser);
+        }
+      }
+
+      console.log("[SocketService] Stale room check complete");
+    } catch (error) {
+      console.error("[SocketService] Error checking for stale rooms:", error);
+    }
   }
 
   public getIO(): Server {
