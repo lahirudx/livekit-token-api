@@ -15,17 +15,23 @@ export const registerPushToken = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Token and userId are required" });
     }
 
-    // First delete any existing token with this token value
-    await prisma.pushToken.deleteMany({
+    // First try to find and update existing token
+    const existingToken = await prisma.pushToken.findFirst({
       where: { token },
     });
 
-    // Then upsert the token
-    await prisma.pushToken.upsert({
-      where: { userId },
-      update: { token },
-      create: { userId, token },
-    });
+    if (existingToken) {
+      // If token exists, update it
+      await prisma.pushToken.update({
+        where: { id: existingToken.id },
+        data: { userId },
+      });
+    } else {
+      // If token doesn't exist, create new one
+      await prisma.pushToken.create({
+        data: { userId, token },
+      });
+    }
 
     return res
       .status(200)
