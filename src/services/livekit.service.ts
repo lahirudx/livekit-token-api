@@ -221,6 +221,42 @@ export class LiveKitService {
     }
   }
 
+  async isRoomActive(roomId: string): Promise<boolean> {
+    console.log(`[LiveKitService] Checking if room ${roomId} is active`);
+
+    // First check if the room has a source in our local map
+    const source = this.roomSources.get(roomId);
+    if (!source) {
+      console.log(
+        `[LiveKitService] Room ${roomId} has no source in our records`
+      );
+      return false;
+    }
+
+    // Then verify with LiveKit server if the room exists
+    try {
+      const rooms = await this.roomService.listRooms();
+      const room = rooms.find((r) => r.name === roomId);
+
+      if (!room) {
+        console.log(
+          `[LiveKitService] Room ${roomId} not found on LiveKit server`
+        );
+        return false;
+      }
+
+      // Room exists and has a source
+      console.log(
+        `[LiveKitService] Room ${roomId} is active with source ${source}`
+      );
+      return true;
+    } catch (error) {
+      console.error(`[LiveKitService] Error checking room status:`, error);
+      // If we can't verify, assume it's not active for safety
+      return false;
+    }
+  }
+
   private findExistingRoomForUser(username: string): string | undefined {
     for (const [roomId, sourceUser] of this.roomSources.entries()) {
       if (sourceUser === username) {
