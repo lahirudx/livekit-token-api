@@ -159,3 +159,31 @@ export const markNotificationAsRead = async (req: Request, res: Response) => {
       .json({ error: "Failed to mark notification as read" });
   }
 };
+
+export const markAllNotificationsAsRead = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "UserId is required" });
+    }
+
+    const result = await prisma.notification.updateMany({
+      where: { userId, read: false },
+      data: { read: true },
+    });
+
+    return res.status(200).json({
+      message: "All notifications marked as read",
+      updatedCount: result.count,
+    });
+  } catch (error) {
+    console.error("Error marking all notifications as read:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to mark all notifications as read" });
+  }
+};
