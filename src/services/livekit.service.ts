@@ -1,5 +1,6 @@
-import { RoomServiceClient, AccessToken } from "livekit-server-sdk";
+import { RoomServiceClient, AccessToken, Room } from "livekit-server-sdk";
 import crypto from "crypto";
+import { env } from "../env";
 
 export class LiveKitService {
   private static instance: LiveKitService;
@@ -10,10 +11,10 @@ export class LiveKitService {
   private readonly apiSecret: string;
 
   private constructor() {
-    this.apiKey = process.env.LIVEKIT_API_KEY!;
-    this.apiSecret = process.env.LIVEKIT_API_SECRET!;
+    this.apiKey = env.LIVEKIT_API_KEY!;
+    this.apiSecret = env.LIVEKIT_API_SECRET!;
     this.roomService = new RoomServiceClient(
-      process.env.LIVEKIT_URL!,
+      env.LIVEKIT_URL!,
       this.apiKey,
       this.apiSecret
     );
