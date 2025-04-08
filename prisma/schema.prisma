@@ -35,6 +35,8 @@ model Notification {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
   userId    String   @db.ObjectId
+  metadata  Json? // Optional field to store additional data for notifications, such as roomName or other metadata
+  type      String? // Optional field to store the type of the notification (e.g., live_stream)
 }
 
 model PushToken {

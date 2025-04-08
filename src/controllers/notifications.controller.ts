@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { Expo } from "expo-server-sdk";
+// Import NotificationType from the types file
+import { NotificationType } from "../types/NotificationTypes";
 
 const prisma = new PrismaClient();
 const expo = new Expo();
@@ -99,6 +101,8 @@ export const sendLiveNotification = async (req: Request, res: Response) => {
             title: "New Live Stream",
             body: `${username} is now live!`,
             userId: token.userId,
+            type: NotificationType.LIVE_STREAM, // Set the type of the notification using the enum
+            metadata: { roomName }, // Store roomName in metadata
           },
         })
       )
