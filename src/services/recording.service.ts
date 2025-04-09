@@ -4,7 +4,7 @@ import { env } from "../env";
 export class RecordingService {
   private static instance: RecordingService;
   private egressClient: EgressClient;
-  private activeRecordings: Map<string, string> = new Map(); // roomId -> egressId
+  private activeRecordings: Map<string, string> = new Map(); // roomId -> egressIds (comma-separated)
 
   private constructor() {
     this.egressClient = new EgressClient(
@@ -36,24 +36,24 @@ export class RecordingService {
     }
 
     const timestamp = new Date().toISOString();
-    const filePath = `recordings/${roomId}/${timestamp}.mp4`;
-    console.log(`[Recording] Will save to ${filePath}`);
-
-    const output: EncodedOutputs = {
-      file: {
-        filepath: filePath,
-        s3: {
-          accessKey: env.AWS_ACCESS_KEY_ID,
-          secret: env.AWS_SECRET_ACCESS_KEY,
-          region: env.AWS_REGION,
-          bucket: env.S3_BUCKET,
-        },
-      },
-    };
-
-    const egressIds = new Map<string, string>();
+    const egressIds = new Map<string, string>(); // participant -> egressId
 
     for (const participant of participants) {
+      const filePath = `recordings/${roomId}/${participant}-${timestamp}.mp4`; // Unique per participant
+      console.log(`[Recording] Will save ${participant} to ${filePath}`);
+
+      const output: EncodedOutputs = {
+        file: {
+          filepath: filePath,
+          s3: {
+            accessKey: env.AWS_ACCESS_KEY_ID,
+            secret: env.AWS_SECRET_ACCESS_KEY,
+            region: env.AWS_REGION,
+            bucket: env.S3_BUCKET,
+          },
+        },
+      };
+
       console.log(`[Recording] Starting egress for participant ${participant}`);
       const egress = await this.egressClient.startParticipantEgress(
         roomId,
@@ -90,6 +90,7 @@ export class RecordingService {
     for (const egressId of egressIds) {
       try {
         await this.egressClient.stopEgress(egressId);
+        console.log(`[Recording] Stopped egress ${egressId}`);
       } catch (error) {
         console.error(
           `[Recording] Error stopping egress ${egressId}:`,
@@ -99,6 +100,7 @@ export class RecordingService {
     }
 
     this.activeRecordings.delete(roomId);
+    console.log(`[Recording] Recording stopped and removed for ${roomId}`);
   }
 
   public hasActiveRecording(roomId: string): boolean {
