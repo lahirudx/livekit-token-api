@@ -46,3 +46,33 @@ model PushToken {
   user      User     @relation(fields: [userId], references: [id])
   userId    String   @unique @db.ObjectId
 }
+
+model RecordingSession {
+  id         String      @id @default(cuid()) @map("_id")
+  roomId     String
+  sourceUser String
+  startedAt  DateTime    @default(now())
+  endedAt    DateTime?
+  recordings Recording[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Recording {
+  id               String           @id @default(cuid()) @map("_id")
+  sessionId        String
+  participantId    String
+  s3Key            String
+  duration         Int? // Duration in seconds
+  size             Int? // Size in bytes
+  status           RecordingStatus  @default(IN_PROGRESS)
+  recordingSession RecordingSession @relation(fields: [sessionId], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+enum RecordingStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}

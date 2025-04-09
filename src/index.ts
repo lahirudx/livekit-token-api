@@ -6,7 +6,9 @@ import { createServer } from "http";
 import authRoutes from "./routes/auth.routes";
 import livekitRoutes from "./routes/livekit.routes";
 import notificationRoutes from "./routes/notifications.routes";
+import recordingsRoutes from "./routes/recordings.routes";
 import { SocketService } from "./services/socket.service";
+import prisma from "./db";
 
 dotenv.config();
 
@@ -23,6 +25,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/livekit", livekitRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/recordings", recordingsRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -31,7 +34,20 @@ app.get("/health", (_req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-httpServer.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log("Make sure this server is accessible from your device's network");
-});
+// Initialize database connection
+prisma
+  .$connect()
+  .then(() => {
+    console.log("Database connected successfully");
+
+    httpServer.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+      console.log(
+        "Make sure this server is accessible from your device's network"
+      );
+    });
+  })
+  .catch((error) => {
+    console.error("Failed to connect to database:", error);
+    process.exit(1);
+  });

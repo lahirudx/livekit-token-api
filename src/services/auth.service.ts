@@ -1,9 +1,7 @@
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { RegisterPayload, LoginPayload, AuthResponse } from "../types/auth";
-
-const prisma = new PrismaClient();
+import prisma from "../db";
 
 export class AuthService {
   private static instance: AuthService;
@@ -63,7 +61,7 @@ export class AuthService {
         },
       });
 
-      const token = this.generateToken(user.id);
+      const token = this.generateToken(user.id, user.username);
 
       return {
         token,
@@ -95,7 +93,7 @@ export class AuthService {
       throw new Error("Invalid credentials");
     }
 
-    const token = this.generateToken(user.id);
+    const token = this.generateToken(user.id, user.username);
 
     return {
       token,
@@ -106,13 +104,16 @@ export class AuthService {
     };
   }
 
-  private generateToken(userId: string): string {
-    return jwt.sign({ userId }, this.JWT_SECRET, {
+  private generateToken(userId: string, username: string): string {
+    return jwt.sign({ userId, username }, this.JWT_SECRET, {
       expiresIn: "7d",
     });
   }
 
-  verifyToken(token: string): { userId: string } {
-    return jwt.verify(token, this.JWT_SECRET) as { userId: string };
+  verifyToken(token: string): { userId: string; username: string } {
+    return jwt.verify(token, this.JWT_SECRET) as {
+      userId: string;
+      username: string;
+    };
   }
 }

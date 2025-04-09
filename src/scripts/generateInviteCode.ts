@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../db";
 
 // Calculate total possible combinations (36^6)
 const TOTAL_COMBINATIONS = Math.pow(36, 6);

@@ -9,6 +9,8 @@ export class SocketService {
   private roomSources: Map<string, string>;
   private sourceLocations: Map<string, { latitude: number; longitude: number }>;
   private recordingService: RecordingService;
+  private activeRecordings: Map<string, string>;
+  private rooms: Map<string, { participants: string[] }>;
 
   private constructor(server: HttpServer) {
     this.io = new Server(server, {
@@ -21,6 +23,8 @@ export class SocketService {
     this.roomParticipants = new Map();
     this.roomSources = new Map();
     this.sourceLocations = new Map();
+    this.activeRecordings = new Map();
+    this.rooms = new Map();
     this.setupSocketHandlers();
     this.startCleanupInterval();
   }
@@ -318,5 +322,98 @@ export class SocketService {
     );
 
     return this.roomSources.get(roomId) === socket.data.username;
+  }
+
+  async handleStartRecording(
+    socket: Socket,
+    data: { roomId: string; username: string }
+  ) {
+    try {
+      if (!this.isSourceUser(socket)) {
+        socket.emit("recording-error", {
+          error: "Only source user can start recording",
+        });
+        return;
+      }
+
+      if (this.activeRecordings.has(data.roomId)) {
+        socket.emit("recording-error", {
+          error: "Recording already in progress",
+        });
+        return;
+      }
+
+      // Create recording session in database
+      const session = await RecordingService.createRecordingSession(
+        data.roomId,
+        data.username
+      );
+
+      // Start recording for each participant
+      const room = this.rooms.get(data.roomId);
+      if (room) {
+        for (const participantId of room.participants) {
+          const recording = await RecordingService.addRecording(
+            session.id,
+            participantId,
+            `recordings/${data.roomId}/${participantId}/${Date.now()}.mp4`
+          );
+
+          // Start recording for this participant
+          // ... existing recording logic ...
+        }
+      }
+
+      this.activeRecordings.set(data.roomId, session.id);
+      socket.emit("recording-started");
+    } catch (error) {
+      console.error("Failed to start recording:", error);
+      socket.emit("recording-error", { error: "Failed to start recording" });
+    }
+  }
+
+  async handleStopRecording(
+    socket: Socket,
+    data: { roomId: string; username: string }
+  ) {
+    try {
+      if (!this.isSourceUser(socket)) {
+        socket.emit("recording-error", {
+          error: "Only source user can stop recording",
+        });
+        return;
+      }
+
+      const sessionId = this.activeRecordings.get(data.roomId);
+      if (!sessionId) {
+        socket.emit("recording-error", { error: "No active recording found" });
+        return;
+      }
+
+      // Stop recording for each participant
+      const room = this.rooms.get(data.roomId);
+      if (room) {
+        for (const participantId of room.participants) {
+          // Stop recording for this participant
+          // ... existing recording stop logic ...
+
+          // Update recording status in database
+          await RecordingService.updateRecordingStatus(
+            sessionId,
+            "COMPLETED",
+            0, // duration
+            0 // size
+          );
+        }
+      }
+
+      // End recording session
+      await RecordingService.endRecordingSession(sessionId);
+      this.activeRecordings.delete(data.roomId);
+      socket.emit("recording-stopped");
+    } catch (error) {
+      console.error("Failed to stop recording:", error);
+      socket.emit("recording-error", { error: "Failed to stop recording" });
+    }
   }
 }

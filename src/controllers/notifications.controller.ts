@@ -1,10 +1,8 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { Expo } from "expo-server-sdk";
-// Import NotificationType from the types file
 import { NotificationType } from "../types/NotificationTypes";
+import prisma from "../db";
 
-const prisma = new PrismaClient();
 const expo = new Expo();
 
 export const registerPushToken = async (req: Request, res: Response) => {
