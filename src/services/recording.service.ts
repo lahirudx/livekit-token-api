@@ -1,4 +1,10 @@
-import { EgressClient, EncodedOutputs } from "livekit-server-sdk";
+import {
+  EgressClient,
+  EncodedOutputs,
+  DirectFileOutput,
+  RoomServiceClient,
+  TrackType,
+} from "livekit-server-sdk";
 import { env } from "../env";
 import { RecordingStatus } from "@prisma/client";
 import prisma from "../db";
@@ -6,10 +12,16 @@ import prisma from "../db";
 export class RecordingService {
   private static instance: RecordingService;
   private egressClient: EgressClient;
-  private activeRecordings: Map<string, string> = new Map(); // roomId -> egressIds (comma-separated)
+  private roomService: RoomServiceClient;
+  private activeRecordings: Map<string, string[]> = new Map(); // roomId -> egressIds array
 
   private constructor() {
     this.egressClient = new EgressClient(
+      env.LIVEKIT_URL,
+      env.LIVEKIT_API_KEY,
+      env.LIVEKIT_API_SECRET
+    );
+    this.roomService = new RoomServiceClient(
       env.LIVEKIT_URL,
       env.LIVEKIT_API_KEY,
       env.LIVEKIT_API_SECRET
@@ -48,7 +60,7 @@ export class RecordingService {
     );
 
     for (const participant of participants) {
-      const filePath = `recordings/${roomId}/${participant}-${timestamp}.mp4`; // Unique per participant
+      const filePath = `recordings/${roomId}/${participant}-${timestamp}.mp4`;
       console.log(`[Recording] Will save ${participant} to ${filePath}`);
 
       // Create recording record in database
@@ -59,59 +71,85 @@ export class RecordingService {
       );
       recordingIds.set(participant, recording.id);
 
-      const output: EncodedOutputs = {
-        file: {
-          filepath: filePath,
-          s3: {
-            accessKey: env.AWS_ACCESS_KEY_ID,
-            secret: env.AWS_SECRET_ACCESS_KEY,
-            region: env.AWS_REGION,
-            bucket: env.S3_BUCKET,
-          },
+      const output: DirectFileOutput = {
+        filepath: filePath,
+        s3: {
+          accessKey: env.AWS_ACCESS_KEY_ID,
+          secret: env.AWS_SECRET_ACCESS_KEY,
+          region: env.AWS_REGION,
+          bucket: env.S3_BUCKET,
         },
       };
 
-      console.log(`[Recording] Starting egress for participant ${participant}`);
-      const egress = await this.egressClient.startParticipantEgress(
-        roomId,
-        participant,
-        output
+      // Get both audio and video tracks for the participant
+      const room = await this.roomService.getParticipant(roomId, participant);
+      const videoTrack = room.tracks.find(
+        (track) => track.type === TrackType.VIDEO
+      );
+      const audioTrack = room.tracks.find(
+        (track) => track.type === TrackType.AUDIO
       );
 
-      if (!egress.egressId) {
-        throw new Error(`Failed to get egress ID for ${participant}`);
+      if (!videoTrack || !audioTrack) {
+        throw new Error(`Missing tracks for participant ${participant}`);
       }
 
+      // Start video track egress
       console.log(
-        `[Recording] Egress started for ${participant} with ID: ${egress.egressId}`
+        `[Recording] Starting video track egress for track ${videoTrack.sid}`
       );
-      egressIds.set(participant, egress.egressId);
+      const videoEgress = await this.egressClient.startTrackEgress(
+        roomId,
+        { ...output, filepath: `${filePath}-video` },
+        videoTrack.sid
+      );
 
-      // Store egress ID in recording record
+      if (!videoEgress.egressId) {
+        throw new Error(`Failed to get video egress ID for ${participant}`);
+      }
+
+      // Start audio track egress
+      console.log(
+        `[Recording] Starting audio track egress for track ${audioTrack.sid}`
+      );
+      const audioEgress = await this.egressClient.startTrackEgress(
+        roomId,
+        { ...output, filepath: `${filePath}-audio` },
+        audioTrack.sid
+      );
+
+      if (!audioEgress.egressId) {
+        throw new Error(`Failed to get audio egress ID for ${participant}`);
+      }
+
+      // Store both egress IDs
+      const egressIds = [videoEgress.egressId, audioEgress.egressId];
+      const currentEgressIds = this.activeRecordings.get(roomId) || [];
+      this.activeRecordings.set(roomId, [...currentEgressIds, ...egressIds]);
+
+      // Store egress IDs in recording record
       await prisma.recording.update({
         where: { id: recording.id },
         data: {
-          s3Key: `${filePath}-${egress.egressId}`,
+          s3Key: filePath,
         },
       });
+
+      console.log(`[Recording] Stored egress IDs: ${egressIds.join(",")}`);
     }
 
-    const egressIdsStr = Array.from(egressIds.values()).join(",");
-    this.activeRecordings.set(roomId, egressIdsStr);
-    console.log(`[Recording] Stored egress IDs: ${egressIdsStr}`);
-
-    return egressIdsStr;
+    const allEgressIds = this.activeRecordings.get(roomId) || [];
+    return allEgressIds.join(",");
   }
 
   public async stopRecording(roomId: string): Promise<void> {
     console.log(`[Recording] Stopping recording for room ${roomId}`);
-    const egressIdsStr = this.activeRecordings.get(roomId);
+    const egressIds = this.activeRecordings.get(roomId);
 
-    if (!egressIdsStr) {
+    if (!egressIds || egressIds.length === 0) {
       throw new Error("No active recording found");
     }
 
-    const egressIds = egressIdsStr.split(",");
     for (const egressId of egressIds) {
       try {
         await this.egressClient.stopEgress(egressId);
@@ -121,7 +159,7 @@ export class RecordingService {
         const recording = await prisma.recording.findFirst({
           where: {
             s3Key: {
-              endsWith: egressId,
+              contains: roomId,
             },
           },
         });
