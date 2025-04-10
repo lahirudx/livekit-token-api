@@ -27,6 +27,16 @@ sudo systemctl enable docker
 
 # Add your user to docker group
 sudo usermod -aG docker ubuntu
+
+# Restart Docker
+sudo systemctl restart docker
+
+# Log out and log back in for group changes to take effect
+exit
+# SSH back in: ssh ubuntu@your-ec2-ip
+
+# Verify Docker access
+docker ps
 ```
 
 3. Create project directory:
@@ -159,25 +169,35 @@ docker-compose exec certbot certbot certificates
 
 ## Common Issues
 
-1. Permission Issues:
+1. Docker Permission Issues:
+```bash
+# If you get permission errors with Docker
+sudo usermod -aG docker $USER
+sudo systemctl restart docker
+# Log out and log back in
+exit
+# SSH back in: ssh ubuntu@your-ec2-ip
+```
+
+2. Permission Issues:
 ```bash
 # If you get permission errors
 sudo chown -R ubuntu:ubuntu /opt/wiink-server
 ```
 
-2. Docker Issues:
+3. Docker Issues:
 ```bash
 # Restart Docker
 sudo systemctl restart docker
 ```
 
-3. SSL Issues:
+4. SSL Issues:
 ```bash
 # Renew certificates manually
 docker-compose exec certbot certbot renew
 ```
 
-4. MongoDB Issues:
+5. MongoDB Issues:
 ```bash
 # Check MongoDB logs
 docker-compose logs mongodb
