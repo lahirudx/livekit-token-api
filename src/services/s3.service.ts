@@ -35,12 +35,12 @@ export class S3Service {
   static async getObjectStream(key: string) {
     try {
       console.log("Getting object stream from S3:", {
-        bucket: env.S3_BUCKET,
+        bucket: env.AWS_BUCKET_NAME,
         key,
       });
       const response = await s3Client.send(
         new GetObjectCommand({
-          Bucket: env.S3_BUCKET,
+          Bucket: env.AWS_BUCKET_NAME,
           Key: key,
         })
       );
@@ -69,7 +69,7 @@ export class S3Service {
       console.error("Failed to get object stream from S3:", {
         error: error.message,
         code: error.Code,
-        bucket: env.S3_BUCKET,
+        bucket: env.AWS_BUCKET_NAME,
         key,
       });
       throw error;
@@ -79,12 +79,12 @@ export class S3Service {
   static async getPresignedUrl(s3Key: string): Promise<string> {
     try {
       console.log("Generating presigned URL for:", {
-        bucket: env.S3_BUCKET,
+        bucket: env.AWS_BUCKET_NAME,
         key: s3Key,
       });
 
       const command = new GetObjectCommand({
-        Bucket: env.S3_BUCKET,
+        Bucket: env.AWS_BUCKET_NAME,
         Key: s3Key,
       });
 

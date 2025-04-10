@@ -77,7 +77,7 @@ export class RecordingService {
           accessKey: env.AWS_ACCESS_KEY_ID,
           secret: env.AWS_SECRET_ACCESS_KEY,
           region: env.AWS_REGION,
-          bucket: env.S3_BUCKET,
+          bucket: env.AWS_BUCKET_NAME,
         },
       };
 

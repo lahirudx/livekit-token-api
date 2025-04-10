@@ -15,7 +15,7 @@ export const env = cleanEnv(process.env, {
   AWS_ACCESS_KEY_ID: str(),
   AWS_SECRET_ACCESS_KEY: str(),
   AWS_REGION: str(),
-  S3_BUCKET: str(),
+  AWS_BUCKET_NAME: str(),
 
   // JWT
   JWT_SECRET: str(),
